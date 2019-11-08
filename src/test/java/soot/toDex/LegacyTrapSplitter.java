@@ -1,8 +1,5 @@
 package soot.toDex;
 
-import java.util.HashMap;
-import java.util.LinkedHashSet;
-
 /*-
  * #%L
  * Soot - a J*va Optimization Framework
@@ -42,13 +39,9 @@ import soot.jimple.Jimple;
  *
  * @author Steven Arzt
  */
-public class TrapSplitter extends BodyTransformer {
+public class LegacyTrapSplitter extends BodyTransformer {
 
-  public TrapSplitter(Singletons.Global g) {
-  }
-
-  public static TrapSplitter v() {
-    return soot.G.v().soot_toDex_TrapSplitter();
+  public LegacyTrapSplitter(Singletons.Global g) {
   }
 
   private class TrapOverlap {
@@ -65,11 +58,6 @@ public class TrapSplitter extends BodyTransformer {
 
   @Override
   protected void internalTransform(Body b, String phaseName, Map<String, String> options) {
-
-    if (b.getMethod().getDeclaringClass().getName().equals("android.support.v4.content.ModernAsyncTask$2")
-        && b.getMethod().getName().equals("call")) {
-      System.out.println("yuuuh");
-    }
     // If we have less then two traps, there's nothing to do here
     if (b.getTraps().size() < 2) {
       return;
@@ -184,72 +172,26 @@ public class TrapSplitter extends BodyTransformer {
   }
 
   /**
-   * Gets two arbitrary overlapping traps t1, t2 in the given method body. The
-   * begin unit of the t2 should be equal to or occurring after the begin unit of
-   * t1.
+   * Gets two arbitrary overlapping traps in the given method body
    *
    * @param b The body in which to look for overlapping traps
    * @return Two overlapping traps if they exist, otherwise null
    */
   private TrapOverlap getNextOverlap(Body b) {
-    Map<Unit, LinkedHashSet<Trap>> trapsContainingThisUnit = new HashMap<>();
     for (Trap t1 : b.getTraps()) {
       // Look whether one of our trapped statements is the begin
       // statement of another trap
       for (Unit splitUnit = t1.getBeginUnit(); splitUnit != t1.getEndUnit(); splitUnit = b.getUnits()
           .getSuccOf(splitUnit)) {
-        LinkedHashSet<Trap> otherTrapsContainingUnit = trapsContainingThisUnit.get(splitUnit);
-        if (otherTrapsContainingUnit != null) {
-          for (Trap t2 : otherTrapsContainingUnit) {
-            // if we got here, this unit is already contained inside another trap.
-            // the other traps were added earlier
-            if (t2.getEndUnit() != t1.getEndUnit() || t2.getException() == t1.getException()) {
-
-              // this restores the old function behavior
-              if (splitUnit == t1.getBeginUnit())
-                return new TrapOverlap(t2, t1, splitUnit);
-              else
-                return new TrapOverlap(t1, t2, splitUnit);
-            }
+        for (Trap t2 : b.getTraps()) {
+          if (t1 != t2 && (t1.getEndUnit() != t2.getEndUnit() || t1.getException() == t2.getException())
+              && t2.getBeginUnit() == splitUnit) {
+            return new TrapOverlap(t1, t2, t2.getBeginUnit());
           }
-          otherTrapsContainingUnit.add(t1);
-        } else {
-          LinkedHashSet<Trap> newSet = new LinkedHashSet<>();
-          newSet.add(t1);
-          trapsContainingThisUnit.put(splitUnit, newSet);
         }
-
       }
     }
-
     return null;
-  }
-
-  /**
-   * Create a map of units to integer, denoting the index of an unit
-   * 
-   * @param b the body
-   * @return the map
-   */
-  protected Map<Unit, Integer> createUnitNumbers(Body b) {
-    int idx = 0;
-    Map<Unit, Integer> res = new HashMap<Unit, Integer>();
-    for (Unit u : b.getUnits()) {
-      res.put(u, idx++);
-    }
-    return res;
-  }
-
-  /**
-   * Returns true when a comes before b according to the unit map
-   * 
-   * @param unitMap the unit map
-   * @param a
-   * @param b
-   * @return true when a comes before b according to the unit map
-   */
-  protected boolean trapStartsBefore(Map<Unit, Integer> unitMap, Trap a, Trap b) {
-    return unitMap.get(a.getBeginUnit()) < unitMap.get(b.getBeginUnit());
   }
 
 }
